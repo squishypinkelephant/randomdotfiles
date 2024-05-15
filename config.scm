@@ -8,12 +8,12 @@
     (gnu home services shells)
     (gnu home services shepherd)
     (gnu home services sound)
-    (gnu services virtualization)
     (guix channels)
     (nongnu packages linux)
     (nongnu system linux-initrd))
 (use-package-modules
     admin
+    firmware
     freedesktop
     gimp
     kde-frameworks
@@ -24,7 +24,8 @@
     kde-plasma
     kde-systemtools
     kde-utils
-    version-control)
+    version-control
+    virtualization)
 (use-service-modules
     admin
     audio
@@ -35,6 +36,7 @@
     pm
     sddm
     sound
+    virtualization
     xorg)
 
 (define rootdisk
@@ -111,7 +113,9 @@
         (packages (list
             gimp
             htop
-            falkon))
+            falkon
+            kate
+            virt-manager))
         (services (list
             (service home-bash-service-type)
             (service home-gpg-agent-service-type)
@@ -159,7 +163,7 @@
         (user-account
             (name "workstation")
             (group "workstation")
-            (supplementary-groups '("users" "wheel" "netdev" "audio" "video"))))
+            (supplementary-groups '("audio" "libvirt" "netdev" "users" "video" "wheel"))))
     %base-user-accounts))
     (groups (append (list
         (user-group
@@ -217,6 +221,7 @@
                 (keyboard-layout keyboard-layout))
             sddm-service-type)
         (service tlp-service-type)
+        (service libvirt-service-type)
         (service home-service-type
             '(("workstation", default-home)))
         (service zram-device-service-type
@@ -242,6 +247,8 @@
     (packages (append (list
         ;; SHOULD be default ?
         git
+        ;;
+        ovmf
         ;; important for users???
         xdg-desktop-portal
         xdg-desktop-portal-kde
