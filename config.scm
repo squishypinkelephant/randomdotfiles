@@ -6,11 +6,12 @@
     (gnu home services gnupg)
     (gnu home services guix)
     (gnu home services shells)
+    (gnu home services shepherd)
     (gnu home services sound)
+    (gnu services virtualization)
     (guix channels)
     (nongnu packages linux)
-    (nongnu system linux-initrd)
-    )
+    (nongnu system linux-initrd))
 (use-package-modules
     admin
     freedesktop
@@ -23,8 +24,7 @@
     kde-plasma
     kde-systemtools
     kde-utils
-    version-control
-    )
+    version-control)
 (use-service-modules
     admin
     audio
@@ -35,18 +35,20 @@
     pm
     sddm
     sound
-    xorg
-    )
+    xorg)
 
 (define rootdisk
     (uuid "11e5bb8d-67d1-4b04-9ace-e091d1284032"))
+(define esppart
+    (uuid "9506-D66D" 'fat))
 
 (define rootfs
     (file-system
-        (device "tmpfs")
+        (device "none")
         (type "tmpfs")
         (mount-point "/")
-        (options "defaults,size=8G,mode=755")))
+        ;;(options "defaults,size=8G,mode=755")
+        (check? #f)))
 (define rootfs-boot
     (file-system
         (device rootdisk)
@@ -109,8 +111,7 @@
         (packages (list
             gimp
             htop
-            falkon
-        ))
+            falkon))
         (services (list
             (service home-bash-service-type)
             (service home-gpg-agent-service-type)
@@ -121,11 +122,20 @@
                     (commit "6e86089d563ccb67ae04cd941ca7b66c1777831f"))
                 (channel (name 'nonguix)
                     (url "https://gitlab.com/nonguix/nonguix")
-                    (commit "7081518be7d2dbb58f3fbfeb1785254a6f0059c8"))))
+                    (commit "7081518be7d2dbb58f3fbfeb1785254a6f0059c8")
+                    (introduction
+                        (make-channel-introduction
+                        "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
+                        (openpgp-fingerprint
+                        "2A39 3FFF 68F4 EF7A 3D29  12AF 6F51 20A0 22FB B2D5"))))))
                     ;; frozen to 5-14-2024
-            (service home-pipewire-service-type)
-        ))
-    ))
+            (simple-service 'home-polkit-kde-agent home-shepherd-service-type
+                (shepherd-service
+                    (provision '(polkit-kde-agent))
+                    (start #~(make-forkexec-constructor
+                        "/libexec/polkit-kde-authentication-agent-1"))
+                    (stop #~(make-kill-destructor))))
+            (service home-pipewire-service-type)))))
 
 (operating-system
     ;; simple things
@@ -149,8 +159,7 @@
         (user-account
             (name "workstation")
             (group "workstation")
-            (supplementary-groups '("users" "wheel" "netdev" "audio" "video")))
-        )
+            (supplementary-groups '("users" "wheel" "netdev" "audio" "video"))))
     %base-user-accounts))
     (groups (append (list
         (user-group
@@ -170,7 +179,7 @@
         gnu-persist
         ;; esp
         (file-system
-            (device (uuid "9506-D66D" 'fat))
+            (device esppart)
             (type "vfat")
             (dependencies (list rootfs-boot))
             (mount-point "/boot/efi")
@@ -196,15 +205,17 @@
     (swap-devices (list
         (swap-space
             (target "/swap/swapfile")
-            (dependencies (list rootfs-swap)))
-    ))
+            (dependencies (list rootfs-swap)))))
 
     ;; services
     (services (append (list
         (service earlyoom-service-type)
         (service fstrim-service-type)
         (service plasma-desktop-service-type)
-        (service sddm-service-type)
+        (set-xorg-configuration
+            (xorg-configuration
+                (keyboard-layout keyboard-layout))
+            sddm-service-type)
         (service tlp-service-type)
         (service home-service-type
             '(("workstation", default-home)))
@@ -226,8 +237,7 @@
                 (authorized-keys (append (list
                     (plain-file "non-guix.pub"
                     "(public-key (ecc (curve Ed25519) (q #C1FD53E5D4CE971933EC50C9F307AE2171A2D3B52C804642A7A35F84F3A4EA98#)))"))
-                    %default-authorized-guix-keys)))))
-    ))
+                    %default-authorized-guix-keys)))))))
     ;; global packages. this shouldn't ever be long. maybe...
     (packages (append (list
         ;; SHOULD be default ?
@@ -236,8 +246,5 @@
         xdg-desktop-portal
         xdg-desktop-portal-kde
         xdg-user-dirs
-        xdg-utils
-        )
-    %base-packages))
-
-)
+        xdg-utils)
+    %base-packages)))
